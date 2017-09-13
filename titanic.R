@@ -7,9 +7,14 @@ library(gridExtra)
 library(ggthemes)
 library(stringr)
 library(randomForest)
+library(xgboost)
+library(caret)
+library(e1071)
 
 test <- read.csv('test.csv')
 train <- read.csv('train.csv')
+
+
 
 full <- bind_rows(test, train)
 summary(full)
@@ -65,10 +70,22 @@ p7 <- ggplot(train, aes(x=Age, fill = Survived)) +
   ggtitle('Age vs Survived vs Pclass') +
   ylab('# survived')
 
-p6
-p7
+p8 <- ggplot(train[train$Pclass == "1",], aes(Embarked, Fare, fill = Survived)) +
+  geom_boxplot() +
+  geom_hline(aes(yintercept=80), 
+             colour='red', linetype='dashed', lwd=2)
 
-grid.arrange(p6, p7)
+full$Embarked[c(480, 1248)] <- 'C'
+
+sum(is.na(full$Fare))
+full[153,]
+p9 <- ggplot(full[full$Pclass == "3",], aes(x=Fare))+
+    geom_density(fill = 'blue', alpha = 0.3)+
+    geom_vline(aes(xintercept=median(full[full$Pclass == "3",]$Fare, na.rm = T)))
+p9
+
+
+full$Fare[153] <- median(full[full$Pclass == "3",]$Fare, na.rm = T)
 
 ggsave(filename ="MyPlots3.pdf", plot=grid.arrange(p6, p7))
 
@@ -85,20 +102,41 @@ ggplot(train, aes(x = Pclass, y = Fare)) +
 
 title <- str_extract(full$Name, "[A-Z][a-z]*\\.")
 
-full$title <- title
-full$family_size <- full$SibSp + full$Parch
+full$Title <- title
+
+table(full$Sex, full$Title)
+
+full$Title[full$Title == "Capt."] <- "Other"
+full$Title[full$Title == "Col."] <- "Other"
+full$Title[full$Title == "Countess."] <- "Other"
+full$Title[full$Title == "Don."] <- "Other"
+full$Title[full$Title == "Dona."] <- "Other"
+full$Title[full$Title == "Jonkheer."] <- "Other"
+full$Title[full$Title == "Lady."] <- "Other"
+full$Title[full$Title == "Major."] <- "Other"
+full$Title[full$Title == "Mlle."] <- "Miss."
+full$Title[full$Title == "Ms."] <- "Miss."
+full$Title[full$Title == "Rev."] <- "Other"
+full$Title[full$Title == "Sir."] <- "Other"
+full$Title[full$Title == "Dr."] <- "Other"
+full$Title[full$Title == "Mme."] <- "Miss."
+
+p10 <- ggplot(full[419:1309,], aes(x = Title, fill = Survived)) +
+  geom_bar()
+
+p10
+
+full$family_size <- full$SibSp + full$Parch + 1
 full$ticket_type <- as.factor(substr(full$Ticket,1,1))
-pred_Age <- median(train1[!is.na(train1$Age),"Age"])
-pred_fare <- median(train1[!is.na(train1$Fare),"Fare"])
-full$Age[is.na(full$Age)] <- pred_Age
-full$Fare[is.na(full$Fare)] <- pred_fare
-full$title <- as.factor(full$title)
+
+
+full$Title <- as.factor(full$Title)
 full$Embarked <- as.factor(full$Embarked)
 summary(full)
 
 # modeling
 sum(is.na(full$Age))
-sum(is.na(train1$Age))
+
 
 test1 <- full[1:418,]
 train1 <- full[419:1309,]
@@ -106,18 +144,32 @@ train1 <- full[419:1309,]
 summary(train1)
 rf1 <- randomForest(data=train1, 
                   Survived ~ Pclass + Sex + SibSp +
-                  Parch + Fare + Embarked + title + family_size + ticket_type)
+                  Parch + Fare + Embarked + Title + family_size + ticket_type)
 pred1 <- predict(rf1, test1)
 pred1 <- cbind(test1$PassengerId, pred1)
 pred1[,2] <- (pred1[,2] -1)
 
-pred1[153,2] = 1
-pred1[153,2] = 0
+spr1 <- test1[153,]
+
 
 nrow(test1)
 str(pred1)
 
+write.table(pred1, "pred4.csv", row.names = FALSE, col.names = c("PassengerID", "Survived"), sep = ",")
 
-write.table(pred1, "pred2.csv", row.names = FALSE, col.names = c("PassengerID", "Survived"), sep = ",")
-
+pred1[153,2] = 0
 write.table(pred1, "pred3.csv", row.names = FALSE, col.names = c("PassengerID", "Survived"), sep = ",")
+
+nn1 <- train(Survived ~ Pclass + Sex + SibSp +
+               Parch + Fare + Embarked + Title + family_size + ticket_type,
+             data=train1,
+             method = "knn",
+             preProcess = c("center", "scale"),
+             tuneLength = 10,
+             trControl = trainControl(method = "cv"))
+
+
+pred2 <- predict(nn1, test1)
+pred2 <- cbind(test1$PassengerId, pred2)
+pred2[,2] <- (pred2[,2] -1)
+write.table(pred2, "pred5.csv", row.names = FALSE, col.names = c("PassengerID", "Survived"), sep = ",")
