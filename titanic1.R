@@ -153,6 +153,11 @@ full[is.na(full$Age) & full$Title == "Miss.",]$Age <- 21.83
 full[is.na(full$Age) & full$Title == "Master.",]$Age <- 5.48
 full[is.na(full$Age) & full$Title == "Other",]$Age <- 45.17
 
+#feature engineering - adding ticket group
+
+ticket_group <- transform(full$Ticket, id= as.numeric(factor(full$Ticket)))
+full$ticket_group <- as.character(ticket_group[2,])
+
 age1
 # modeling
 sum(is.na(full$Age))
@@ -262,3 +267,15 @@ pred7 <- predict(glm1, test1)
 pred7 <- cbind(test1$PassengerId, pred7)
 pred7[,2] <- (pred7[,2] -1)
 write.table(pred7, "pred10.csv", row.names = FALSE, col.names = c("PassengerID", "Survived"), sep = ",")
+
+
+rf5 <- randomForest(data=train1, 
+                    Survived ~ Pclass + Sex + SibSp +
+                      Parch + Fare + Embarked + Title + family_size + ticket_type + ticket_group, 
+                    importance = T)
+imp5 <- importance(rf5)
+
+pred8 <- predict(rf5, test1)
+pred8 <- cbind(test1$PassengerId, pred8)
+pred8[,2] <- (pred8[,2] -1)
+write.table(pred8, "pred11.csv", row.names = FALSE, col.names = c("PassengerID", "Survived"), sep = ",")
